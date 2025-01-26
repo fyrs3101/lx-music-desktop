@@ -5,6 +5,9 @@ on:
     branches:
       - beta
 
+env:
+  IS_CI: 'true'
+
 jobs:
   # CheckCode:
   #   name: Lint Code
@@ -16,7 +19,7 @@ jobs:
   #     - name: Install Node.js
   #       uses: actions/setup-node@v4
   #       with:
-  #         node-version: '16'
+  #         node-version: 20
 
   #     - name: Cache file
   #       uses: actions/cache@v4
@@ -40,20 +43,24 @@ jobs:
   Windows:
     name: Windows
     runs-on: windows-latest
-    env:
-      NPM_CACHE: '%APPDATA%\npm-cache'
-      ELECTRON_CACHE: '%LOCALAPPDATA%\electron\Cache'
-      ELECTRON_BUILDERCACHE: '%LOCALAPPDATA%\electron-builder\Cache'
     # needs: CheckCode
     steps:
       - name: Check out git repository
         uses: actions/checkout@v4
 
+      - name: Get npm cache directory
+        shell: pwsh
+        run: echo "NPM_CACHE=$(npm config get cache)" >> $env:GITHUB_ENV
+
       - name: Setup Node Env
+        env:
+          NPM_CACHE: ${{ env.NPM_CACHE }}
         uses: ./.github/actions/setup
 
       - name: Build src code
-        run: npm run build
+        run: |
+          git status --porcelain
+          npm run build
 
       - name: Build Package Setup x64
         run: npm run pack:win:setup:x64
@@ -127,22 +134,26 @@ jobs:
     name: Mac
     runs-on: macos-latest
     # needs: CheckCode
-    env:
-      NPM_CACHE: $HOME/.npm
-      ELECTRON_CACHE: $HOME/.cache/electron
-      ELECTRON_BUILDERCACHE: $HOME/.cache/electron-builder
     steps:
       - name: Check out git repository
         uses: actions/checkout@v4
 
       - name: Install python setuptools
-        run: python3 -m pip install setuptools
+        run: brew install python-setuptools
+
+      - name: Get npm cache directory
+        shell: bash
+        run: echo "NPM_CACHE=$(npm config get cache)" >> $GITHUB_ENV
 
       - name: Setup Node Env
+        env:
+          NPM_CACHE: ${{ env.NPM_CACHE }}
         uses: ./.github/actions/setup
 
       - name: Build src code
-        run: npm run build
+        run: |
+          git status --porcelain
+          npm run build
 
       - name: Build Package dmg
         run: |
@@ -170,10 +181,6 @@ jobs:
   Linux:
     name: Linux
     runs-on: ubuntu-latest
-    env:
-      NPM_CACHE: $HOME/.npm
-      ELECTRON_CACHE: $HOME/.cache/electron
-      ELECTRON_BUILDERCACHE: $HOME/.cache/electron-builder
     # needs: CheckCode
     steps:
       - name: Install package
@@ -182,11 +189,19 @@ jobs:
       - name: Check out git repository
         uses: actions/checkout@v4
 
+      - name: Get npm cache directory
+        shell: bash
+        run: echo "NPM_CACHE=$(npm config get cache)" >> $GITHUB_ENV
+
       - name: Setup Node Env
+        env:
+          NPM_CACHE: ${{ env.NPM_CACHE }}
         uses: ./.github/actions/setup
 
       - name: Build src code
-        run: npm run build
+        run: |
+          git status --porcelain
+          npm run build
 
       - name: Build Package deb amd64
         run: npm run pack:linux:deb:amd64

@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import crypto from 'node:crypto'
 import { gzip, gunzip } from 'node:zlib'
 import path from 'node:path'
+import { networkInterfaces } from 'node:os'
 import { log } from '@common/utils'
 
 export const joinPath = (...paths: string[]): string => path.join(...paths)
@@ -29,6 +30,25 @@ export const checkPath = async(path: string): Promise<boolean> => {
     })
   })
 }
+
+/**
+ * 检查路径并创建目录
+ * @param path
+ * @returns
+ */
+export const checkAndCreateDir = async(path: string) => {
+  return fs.promises.access(path, fs.constants.F_OK | fs.constants.W_OK)
+    .catch(async(err: NodeJS.ErrnoException) => {
+      if (err.code != 'ENOENT') throw err as Error
+      return fs.promises.mkdir(path, { recursive: true })
+    })
+    .then(() => true)
+    .catch((err) => {
+      console.error(err)
+      return false
+    })
+}
+
 
 export const getFileStats = async(path: string): Promise<fs.Stats | null> => {
   return new Promise(resolve => {
@@ -184,4 +204,21 @@ export const copyFile = async(sourcePath: string, distPath: string) => {
 
 export const moveFile = async(sourcePath: string, distPath: string) => {
   return fs.promises.rename(sourcePath, distPath)
+}
+
+export const getAddress = (): string[] => {
+  const nets = networkInterfaces()
+  const results: string[] = []
+  // console.log(nets)
+
+  for (const interfaceInfos of Object.values(nets)) {
+    if (!interfaceInfos) continue
+    // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+    for (const interfaceInfo of interfaceInfos) {
+      if (interfaceInfo.family === 'IPv4' && !interfaceInfo.internal) {
+        results.push(interfaceInfo.address)
+      }
+    }
+  }
+  return results
 }

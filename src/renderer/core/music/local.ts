@@ -16,26 +16,26 @@ import {
 } from './utils'
 
 
-const getOtherSourceByLocal = async(musicInfo: LX.Music.MusicInfoLocal) => {
+const getOtherSourceByLocal = async<T>(musicInfo: LX.Music.MusicInfoLocal, handler: (infos: LX.Music.MusicInfoOnline[]) => Promise<T>) => {
   let result: LX.Music.MusicInfoOnline[] = []
   result = await getOtherSource(musicInfo)
-  if (result.length) return result
+  if (result.length) try { return await handler(result) } catch {}
   if (musicInfo.name.includes('-')) {
     const [name, singer] = musicInfo.name.split('-').map(val => val.trim())
     result = await getOtherSource({
       ...musicInfo,
       name,
       singer,
-    })
-    if (result.length) return result
+    }, true)
+    if (result.length) try { return await handler(result) } catch {}
     result = await getOtherSource({
       ...musicInfo,
       name: singer,
       singer: name,
-    })
-    if (result.length) return result
+    }, true)
+    if (result.length) try { return await handler(result) } catch {}
   }
-  let fileName = musicInfo.meta.filePath.split('/').at(-1)
+  let fileName = musicInfo.meta.filePath.split(/\/|\\/).at(-1)
   if (fileName) {
     fileName = fileName.substring(0, fileName.lastIndexOf('.'))
     if (fileName != musicInfo.name) {
@@ -45,30 +45,31 @@ const getOtherSourceByLocal = async(musicInfo: LX.Music.MusicInfoLocal) => {
           ...musicInfo,
           name,
           singer,
-        })
-        if (result.length) return result
+        }, true)
+        if (result.length) try { return await handler(result) } catch {}
         result = await getOtherSource({
           ...musicInfo,
           name: singer,
           singer: name,
-        })
+        }, true)
       } else {
         result = await getOtherSource({
           ...musicInfo,
           name: fileName,
           singer: '',
-        })
+        }, true)
       }
-      if (result.length) return result
+      if (result.length) try { return await handler(result) } catch {}
     }
   }
 
-  return result
+  throw new Error('source not found')
 }
 
-export const getMusicUrl = async({ musicInfo, isRefresh, onToggleSource = () => {} }: {
+export const getMusicUrl = async({ musicInfo, isRefresh, allowToggleSource = true, onToggleSource = () => {} }: {
   musicInfo: LX.Music.MusicInfoLocal
   isRefresh: boolean
+  allowToggleSource?: boolean
   onToggleSource?: (musicInfo?: LX.Music.MusicInfoOnline) => void
 }): Promise<string> => {
   if (!isRefresh) {
@@ -83,15 +84,17 @@ export const getMusicUrl = async({ musicInfo, isRefresh, onToggleSource = () => 
     })
   } catch {}
 
-  onToggleSource()
-  const otherSource = await getOtherSourceByLocal(musicInfo)
-  if (!otherSource.length) throw new Error('source not found')
-  return getOnlineOtherSourceMusicUrl({ musicInfos: [...otherSource], onToggleSource, isRefresh }).then(({ url, quality: targetQuality, musicInfo: targetMusicInfo, isFromCache }) => {
-    // saveLyric(musicInfo, data.lyricInfo)
-    if (!isFromCache) void saveMusicUrl(targetMusicInfo, targetQuality, url)
+  if (!allowToggleSource) throw new Error('failed')
 
-    // TODO: save url ?
-    return url
+  onToggleSource()
+  return getOtherSourceByLocal(musicInfo, async(otherSource) => {
+    return getOnlineOtherSourceMusicUrl({ musicInfos: [...otherSource], onToggleSource, isRefresh }).then(({ url, quality: targetQuality, musicInfo: targetMusicInfo, isFromCache }) => {
+      // saveLyric(musicInfo, data.lyricInfo)
+      if (!isFromCache) void saveMusicUrl(targetMusicInfo, targetQuality, url)
+
+      // TODO: save url ?
+      return url
+    })
   })
 }
 
@@ -115,15 +118,15 @@ export const getPicUrl = async({ musicInfo, listId, isRefresh, onToggleSource = 
   } catch {}
 
   onToggleSource()
-  const otherSource = await getOtherSourceByLocal(musicInfo)
-  if (!otherSource.length) throw new Error('source not found')
-  return getOnlineOtherSourcePicUrl({ musicInfos: [...otherSource], onToggleSource, isRefresh }).then(({ url, musicInfo: targetMusicInfo, isFromCache }) => {
-    if (listId) {
-      musicInfo.meta.picUrl = url
-      void updateListMusics([{ id: listId, musicInfo }])
-    }
+  return getOtherSourceByLocal(musicInfo, async(otherSource) => {
+    return getOnlineOtherSourcePicUrl({ musicInfos: [...otherSource], onToggleSource, isRefresh }).then(({ url, musicInfo: targetMusicInfo, isFromCache }) => {
+      if (listId) {
+        musicInfo.meta.picUrl = url
+        void updateListMusics([{ id: listId, musicInfo }])
+      }
 
-    return url
+      return url
+    })
   })
 }
 
@@ -134,7 +137,8 @@ export const getLyricInfo = async({ musicInfo, isRefresh, onToggleSource = () =>
 }): Promise<LX.Player.LyricInfo> => {
   if (!isRefresh) {
     const [lyricInfo, fileLyricInfo] = await Promise.all([getCachedLyricInfo(musicInfo), window.lx.worker.main.getMusicFileLyric(musicInfo.meta.filePath)])
-    if (lyricInfo?.lyric && lyricInfo.lyric != lyricInfo.rawlrcInfo.lyric) {
+    // console.log(lyricInfo, fileLyricInfo)
+    if (lyricInfo?.lyric && lyricInfo.lyric != fileLyricInfo?.lyric) {
       // 存在已编辑歌词
       return buildLyricInfo({ ...lyricInfo, rawlrcInfo: fileLyricInfo ?? lyricInfo.rawlrcInfo })
     }
@@ -152,15 +156,14 @@ export const getLyricInfo = async({ musicInfo, isRefresh, onToggleSource = () =>
   } catch {}
 
   onToggleSource()
-  const otherSource = await getOtherSourceByLocal(musicInfo)
-  if (!otherSource.length) throw new Error('source not found')
-  // eslint-disable-next-line @typescript-eslint/promise-function-async
-  return getOnlineOtherSourceLyricInfo({ musicInfos: [...otherSource], onToggleSource, isRefresh }).then(({ lyricInfo, musicInfo: targetMusicInfo, isFromCache }) => {
-    void saveLyric(musicInfo, lyricInfo)
+  return getOtherSourceByLocal(musicInfo, async(otherSource) => {
+    return getOnlineOtherSourceLyricInfo({ musicInfos: [...otherSource], onToggleSource, isRefresh }).then(async({ lyricInfo, musicInfo: targetMusicInfo, isFromCache }) => {
+      void saveLyric(musicInfo, lyricInfo)
 
-    if (isFromCache) return buildLyricInfo(lyricInfo)
-    void saveLyric(targetMusicInfo, lyricInfo)
+      if (isFromCache) return buildLyricInfo(lyricInfo)
+      void saveLyric(targetMusicInfo, lyricInfo)
 
-    return buildLyricInfo(lyricInfo)
+      return buildLyricInfo(lyricInfo)
+    })
   })
 }

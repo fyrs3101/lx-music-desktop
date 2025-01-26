@@ -14,10 +14,8 @@ import {
   getCacheSize,
   toggleDevTools,
   setWindowBounds,
-  setProgressBar,
   setIgnoreMouseEvents,
   // setThumbnailClip,
-  setThumbarButtons,
   toggleMinimize,
   toggleHide,
   showSelectDialog,
@@ -63,7 +61,6 @@ export default () => {
       app.exit(0)
       return
     }
-    global.lx.isTrafficLightClose = true
     closeWindow()
   })
   // 全屏
@@ -106,13 +103,6 @@ export default () => {
     setWindowBounds(params)
   })
 
-  mainOn<LX.Player.ProgressBarOptions>(WIN_MAIN_RENDERER_EVENT_NAME.progress, ({ params }) => {
-    // console.log(params)
-    setProgressBar(params.progress, {
-      mode: params.mode ?? 'normal',
-    })
-  })
-
   mainOn<boolean>(WIN_MAIN_RENDERER_EVENT_NAME.set_ignore_mouse_events, ({ params: isIgnored }) => {
     isIgnored
       ? setIgnoreMouseEvents(isIgnored, { forward: true })
@@ -123,8 +113,9 @@ export default () => {
   //   return setThumbnailClip(params)
   // })
 
-  mainOn<LX.TaskBarButtonFlags>(WIN_MAIN_RENDERER_EVENT_NAME.player_action_set_buttons, ({ params }) => {
-    setThumbarButtons(params)
+  mainOn<LX.Player.Status>(WIN_MAIN_RENDERER_EVENT_NAME.player_status, ({ params }) => {
+    // setThumbarButtons(params)
+    global.lx.event_app.player_status(params)
   })
 
   mainOn(WIN_MAIN_RENDERER_EVENT_NAME.inited, () => {

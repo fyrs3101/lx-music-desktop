@@ -3,7 +3,6 @@ import { BrowserWindow } from 'electron'
 import fs from 'fs'
 import path from 'node:path'
 import { openDevTools as handleOpenDevTools } from '@main/utils'
-import { encodePath } from '@common/utils/electron'
 import USER_API_RENDERER_EVENT_NAME from './rendererEvent/name'
 import { getScript } from './utils'
 
@@ -20,6 +19,35 @@ const denyEvents = [
   'media-started-playing',
 ] as const
 
+
+export const getProxy = () => {
+  if (global.lx.appSetting['network.proxy.enable'] && global.lx.appSetting['network.proxy.host']) {
+    return {
+      host: global.lx.appSetting['network.proxy.host'],
+      port: global.lx.appSetting['network.proxy.port'],
+    }
+  }
+  const envProxy = envParams.cmdParams['proxy-server']
+  if (envProxy) {
+    if (envProxy && typeof envProxy == 'string') {
+      const [host, port = ''] = envProxy.split(':')
+      return {
+        host,
+        port,
+      }
+    }
+  }
+  return {
+    host: '',
+    port: '',
+  }
+}
+const handleUpdateProxy = (keys: Array<keyof LX.AppSetting>) => {
+  if (keys.includes('network.proxy.enable') || (global.lx.appSetting['network.proxy.enable'] && keys.some(k => k.startsWith('network.proxy.')))) {
+    sendEvent(USER_API_RENDERER_EVENT_NAME.proxyUpdate, getProxy())
+  }
+}
+
 const winEvent = () => {
   if (!browserWindow) return
   browserWindow.on('closed', () => {
@@ -29,15 +57,15 @@ const winEvent = () => {
 
 export const createWindow = async(userApi: LX.UserApi.UserApiInfo) => {
   await closeWindow()
-  dir ??= process.env.NODE_ENV !== 'production' ? webpackUserApiPath : path.join(encodePath(__dirname), 'userApi')
+  dir ??= process.env.NODE_ENV !== 'production' ? webpackUserApiPath : path.join(__dirname, 'userApi')
 
   if (!html) {
     // eslint-disable-next-line require-atomic-updates
     html = await fs.promises.readFile(path.join(dir, 'renderer/user-api.html'), 'utf8')
   }
   const preloadUrl = process.env.NODE_ENV !== 'production'
-    ? `${path.join(encodePath(__dirname), '../dist/user-api-preload.js')}`
-    : `${path.join(encodePath(__dirname), 'user-api-preload.js')}`
+    ? `${path.join(__dirname, '../dist/user-api-preload.js')}`
+    : `${path.join(__dirname, 'user-api-preload.js')}`
   // console.log(preloadUrl)
 
   /**
@@ -49,6 +77,7 @@ export const createWindow = async(userApi: LX.UserApi.UserApiInfo) => {
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
+    hasShadow: false,
     show: false,
     webPreferences: {
       contextIsolation: true,
@@ -93,7 +122,8 @@ export const createWindow = async(userApi: LX.UserApi.UserApiInfo) => {
   await browserWindow.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html))
 
   browserWindow.on('ready-to-show', async() => {
-    sendEvent(USER_API_RENDERER_EVENT_NAME.initEnv, { ...userApi, script: await getScript(userApi.id) })
+    global.lx.event_app.on('updated_config', handleUpdateProxy)
+    sendEvent(USER_API_RENDERER_EVENT_NAME.initEnv, { ...userApi, script: await getScript(userApi.id), proxy: getProxy() })
   })
 
   // global.modules.userApiWindow.loadFile(join(dir, 'renderer/user-api.html'))
@@ -101,6 +131,7 @@ export const createWindow = async(userApi: LX.UserApi.UserApiInfo) => {
 }
 
 export const closeWindow = async() => {
+  global.lx.event_app.off('updated_config', handleUpdateProxy)
   if (!browserWindow) return
   await Promise.all([
     browserWindow.webContents.session.clearAuthCache(),

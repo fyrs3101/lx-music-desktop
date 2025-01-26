@@ -9,8 +9,10 @@ module.exports = {
     'image-size',
     'message2call',
     '@types/ws',
+    'eslint',
+    '@types/node',
+    'electron-debug',
     // 'eslint-config-standard-with-typescript',
-    // 'typescript', // https://github.com/microsoft/TypeScript/pull/54567
   ],
 
   // target: 'newest',
@@ -27,5 +29,8 @@ module.exports = {
   // target: 'minor',
   // filter: [
   //   'electron',
+  //   'eslint',
+  //   'electron-debug',
+  //   '@types/node',
   // ],
 }
